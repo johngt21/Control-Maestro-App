@@ -5,13 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import requests
 from sklearn.cluster import KMeans
-import time
-import base64
 
 # --- 1. SEGURIDAD ---
 def check_password():
     if "password_correct" not in st.session_state:
-        st.text_input("Control Maestro v4 - Acceso Restringido", type="password", on_change=password_entered, key="password")
+        st.text_input("Control Maestro v5 - Acceso Restringido", type="password", on_change=password_entered, key="password")
         return False
     return st.session_state["password_correct"]
 
@@ -23,132 +21,106 @@ def password_entered():
 
 if not check_password(): st.stop()
 
-# --- 2. FUNCIÓN DE ALERTA SONORA (NUEVO) ---
-def play_alert_sound():
-    # Sonido corto tipo "ping" en base64 para que funcione en cualquier navegador
-    audio_html = """
-        <audio autoplay>
-            <source src="https://cdn.pixabay.com/audio/2022/03/15/audio_7838573297.mp3" type="audio/mp3">
-        </audio>
-    """
-    st.components.v1.html(audio_html, height=0)
+# --- 2. CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Control Maestro v5", layout="wide", page_icon="💠")
+st.title("🎛️ Control Maestro v5")
 
-# --- 3. CONFIGURACIÓN TELEGRAM ---
-TOKEN = "8596067199:AAFhwB6pcrCH5FZTE0fkmvkMApKWIbH3cGI"
-CHAT_ID = "759241835"
-
-def enviar_telegram(mensaje):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    try: requests.post(url, data={"chat_id": CHAT_ID, "text": mensaje, "parse_mode": "Markdown"})
-    except: pass
-
-st.set_page_config(page_title="Control Maestro v4", layout="wide")
-st.title("💎 Control Maestro v4: Sistema de Alerta Total")
-
-# --- LEYENDAS (Mantenidas) ---
-with st.expander("📚 LEYENDA TÉCNICA Y HERRAMIENTAS"):
-    col1, col2 = st.columns(2)
-    with col1:
+# --- 3. LEYENDAS CLÁSICAS (v4 Style) ---
+with st.expander("📚 LEYENDA TÉCNICA Y GUÍA RÁPIDA"):
+    col_l1, col_l2 = st.columns(2)
+    with col_l1:
         st.markdown("""
         **Nivel Dummie (Simplicidad):**
-        * 🔴 **Muro Rojo:** Precio donde compraron los jefes.
-        * 🔵 **Línea Cian:** El precio 'justo' (Imán).
-        * 💠 **Diamante Azul:** Aviso de que los jefes están atrapando gente.
+        * 🔴 **Muro Rojo:** Precio donde compraron los jefes. Si el precio llega aquí, prepárate.
+        * 🔵 **Línea Cian:** El precio 'justo'. El mercado siempre intenta volver a él.
+        * 💠 **Diamante Azul:** ¡Atrapados! Alguien intentó mover el mercado y los grandes lo detuvieron.
         """)
-    with col2:
+    with col_l2:
         st.markdown("""
         **Nivel Pro (Cuantitativo):**
-        * **POC (Red):** Point of Control. Máxima liquidez detectada.
-        * **VWAP (Cyan):** Benchmark de ejecución institucional.
-        * **VSA & Absorción:** Detección de anomalías Volumen/Rango.
+        * **POC (Red):** Point of Control. Zona de máximo volumen y liquidez institucional.
+        * **VWAP (Cyan):** Benchmark de ejecución. Define el sesgo del día (Bias).
+        * **Win Rate (WR):** Probabilidad estadística basada en los últimos 6 meses.
         """)
 
-if st.sidebar.button('🔄 REESCANEAR MERCADO'):
-    st.rerun()
+# --- 4. GESTIÓN DE RIESGO (Sidebar) ---
+st.sidebar.header("🛡️ GESTIÓN DE RIESGO")
+balance = st.sidebar.number_input("Balance de la Cuenta (USD)", min_value=100.0, value=1000.0, step=100.0)
+riesgo_pct = st.sidebar.slider("% de Riesgo por Operación", 0.5, 3.0, 1.0) / 100
+st.sidebar.markdown("---")
 
+def calcular_posicion(entrada, stop_loss, capital_riesgo):
+    distancia = abs(entrada - stop_loss)
+    return capital_riesgo / distancia if distancia != 0 else 0
+
+# --- 5. LÓGICA DE ANÁLISIS ---
 activos = {"Oro (Gold)": "GC=F", "Yen (USD/JPY)": "USDJPY=X"}
 tfs = {"5m": "2d", "15m": "5d", "1h": "30d"}
 
 for nombre, ticker in activos.items():
-    st.markdown("---")
+    st.markdown(f"## 📊 {nombre}")
     try:
-        df_main = yf.download(ticker, period="30d", interval="1h", progress=False)
-        if isinstance(df_main.columns, pd.MultiIndex): df_main.columns = df_main.columns.get_level_values(0)
+        # --- SCREENER DE WIN RATE (Histórico 6 meses) ---
+        df_wr = yf.download(ticker, period="6mo", interval="1h", progress=False)
+        if isinstance(df_wr.columns, pd.MultiIndex): df_wr.columns = df_wr.columns.get_level_values(0)
         
-        # IA QUANT
-        df_main['Ret'] = df_main['Close'].pct_change()
-        df_main['Volat'] = df_main['Ret'].rolling(10).std()
-        df_clean = df_main.dropna()
-        kmeans = KMeans(n_clusters=2, n_init=10).fit(df_clean[['Volat', 'Ret']])
-        volat_actual = df_clean['Volat'].iloc[-1]
-        es_tendencia = volat_actual > df_clean['Volat'].mean()
+        df_wr['VWAP'] = (df_wr['Close'] * df_wr['Volume']).cumsum() / df_wr['Volume'].cumsum()
+        df_wr['RVOL'] = df_wr['Volume'] / df_wr['Volume'].rolling(20).mean()
+        df_wr['Signal'] = 0
+        df_wr.loc[(df_wr['RVOL'] > 1.7) & (df_wr['Close'] > df_wr['VWAP']), 'Signal'] = 1
+        df_wr.loc[(df_wr['RVOL'] > 1.7) & (df_wr['Close'] < df_wr['VWAP']), 'Signal'] = -1
+        df_wr['Ret'] = df_wr['Signal'].shift(1) * df_wr['Close'].pct_change()
+        
+        trades = df_wr[df_wr['Signal'].shift(1) != 0]
+        wr = (trades['Ret'] > 0).mean() * 100 if len(trades) > 0 else 0
+        pf = trades[trades['Ret'] > 0]['Ret'].sum() / abs(trades[trades['Ret'] < 0]['Ret'].sum() or 1)
 
-        st.subheader(f"📊 {nombre}: {'MODO TENDENCIA' if es_tendencia else 'MODO RANGO'}")
+        # Métrica de Win Rate en UI
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Win Rate (6m)", f"{wr:.1f}%")
+        m2.metric("Profit Factor", f"{pf:.2f}")
+        m3.metric("Señales Detectadas", len(trades))
 
-        # GRÁFICOS
+        # --- ANÁLISIS DE MERCADO (Gráficos) ---
         cols = st.columns(3)
-        info_conclusiones = {}
-
         for idx, (tf, per) in enumerate(tfs.items()):
             df = yf.download(ticker, period=per, interval=tf, progress=False)
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             
-            # BIG MONEY (POC)
+            # POC & VWAP
             bins = 15
             df['price_bin'] = pd.cut(df['Close'], bins=bins)
             poc_price = (df.groupby('price_bin', observed=True)['Volume'].sum().idxmax().left + df.groupby('price_bin', observed=True)['Volume'].sum().idxmax().right) / 2
-            
-            # VWAP e Inclinación
             df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
-            vwap_subiendo = df['VWAP'].iloc[-1] > df['VWAP'].iloc[-2]
             
-            # VSA / DIAMANTE AZUL
+            # Diamante Azul (v5.1 Optimizada)
             df['RVOL'] = df['Volume'] / df['Volume'].rolling(20).mean()
             df['Range'] = df['High'] - df['Low']
-            vsa_abs = (df['RVOL'] > 2.0) & (df['Range'] < df['Range'].rolling(20).mean())
             last = df.iloc[-1]
-            dist_muro = abs(last['Close'] - poc_price) / poc_price
-            es_diamante = (last['RVOL'] > 1.8) and ( (last['High'] - last[['Open','Close']].max(axis=0) > abs(last['Close']-last['Open'])) or vsa_abs )
-            
-            if tf == "5m":
-                info_conclusiones = {"diamante": es_diamante, "muro": dist_muro < 0.0006, "vwap_up": vwap_subiendo, "poc": poc_price}
+            es_diamante = (last['RVOL'] > 1.7) and (last['Range'] < df['Range'].rolling(20).mean().iloc[-1])
 
             with cols[idx]:
                 fig, ax = plt.subplots(figsize=(6, 4))
                 fig.patch.set_facecolor('#0e1117')
                 ax.set_facecolor('#0e1117')
                 ax.plot(df.index, df['Close'], color='white', alpha=0.3)
-                ax.plot(df.index, df['VWAP'], color='cyan', linestyle='--', alpha=0.5)
+                ax.plot(df.index, df['VWAP'], color='cyan', linestyle='--', alpha=0.4)
                 ax.axhline(y=poc_price, color='red', alpha=0.7, linewidth=1.5)
                 
                 if es_diamante:
                     ax.scatter(df.index[-1], df['Close'].iloc[-1], color='#00d4ff', s=150, marker='d', zorder=20)
-                    if tf == "5m":
-                        play_alert_sound() # Activa el sonido
-                        st.toast(f"💎 Diamante en {nombre}", icon="💠")
-                        status_txt = "🔥 SEÑAL MAESTRA" if dist_muro < 0.0006 else "📍 CONTROL MAESTRO"
-                        enviar_telegram(f"*{status_txt}*\nInstrumento: {nombre}\nVWAP: {'SUBIENDO 🟢' if vwap_subiendo else 'BAJANDO 🔴'}\nNivel: {poc_price:.2f}")
-
+                
                 ax.set_title(f"TF: {tf}", color="white", fontsize=10)
-                ax.tick_params(colors='white', labelsize=8)
+                ax.tick_params(colors='gray', labelsize=8)
                 st.pyplot(fig)
-
-        # --- CONCLUSIONES DINÁMICAS ---
-        with st.container(border=True):
-            st.markdown("### 🔍 Análisis Final Control Maestro")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**🧠 Conclusión para Dummies:**")
-                direcc = "Alcista (Comprar)" if info_conclusiones['vwap_up'] else "Bajista (Vender)"
-                if info_conclusiones['diamante'] and info_conclusiones['muro']:
-                    st.success(f"¡ENTRA YA! El precio tocó el muro ({info_conclusiones['poc']:.2f}) y salió el diamante. La tendencia es {direcc}.")
-                else:
-                    st.info(f"El flujo es {direcc}. Pero espera a que el precio toque el Muro Rojo y salga el diamante azul.")
-            with c2:
-                st.markdown("**🔬 Conclusión para Profesionales:**")
-                st.write(f"Inclinación VWAP: {'Positiva' if info_conclusiones['vwap_up'] else 'Negativa'}. POC detectado en {info_conclusiones['poc']:.2f}. El Diamante Azul confirma absorción institucional.")
+                
+                if tf == "5m":
+                    st.write(f"POC (Muro): **{poc_price:.2f}**")
+                    dinero_riesgo = balance * riesgo_pct
+                    lotes = calcular_posicion(last['Close'], poc_price, dinero_riesgo)
+                    st.info(f"Sizing Sugerido: **{lotes:.4f}** unidades")
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error analizando {nombre}: {e}")
 
-st.caption(f"Control Maestro v4 | Alerta Sonora y Telegram Activas")
+st.caption("Control Maestro v5 | Institutional Risk & Win Rate Screener")
