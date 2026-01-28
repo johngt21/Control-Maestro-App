@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 # --- 1. SEGURIDAD ---
 def check_password():
     if "password_correct" not in st.session_state:
-        st.text_input("Control Maestro v8 - Acceso Restringido", type="password", on_change=password_entered, key="password")
+        st.text_input("Control Maestro v8.1 - Acceso Restringido", type="password", on_change=password_entered, key="password")
         return False
     return st.session_state["password_correct"]
 
@@ -20,8 +20,8 @@ def password_entered():
 
 if not check_password(): st.stop()
 
-st.set_page_config(page_title="Control Maestro v8", layout="wide", page_icon="🔥")
-st.title("🎛️ Control Maestro v8: Fuego Maestro Edition")
+st.set_page_config(page_title="Control Maestro v8.1", layout="wide", page_icon="🔥")
+st.title("🎛️ Control Maestro v8.1: Fuego Maestro + BTC")
 
 # --- 2. CALCULADORA DE POSICIÓN (Sidebar) ---
 st.sidebar.header("🛡️ GESTIÓN DE RIESGO")
@@ -34,6 +34,8 @@ def calcular_lotes_final(riesgo, pips, activo):
     if "JPY" in activo:
         return riesgo / (pips * 7.5) 
     else:
+        # Nota: Para BTC verifica si tu broker usa 1 lote = 1 BTC.
+        # Si es así, la fórmula genérica aplica razonablemente bien para distancias en USD.
         return riesgo / (pips * 10)
 
 # --- 3. LEYENDAS Y GUÍAS ---
@@ -54,7 +56,13 @@ with col_b:
         """)
 
 # --- 4. ANÁLISIS DE MERCADO ---
-activos = {"Oro (Gold)": "GC=F", "Yen (USD/JPY)": "USDJPY=X"}
+# AQUI SE AGREGÓ BITCOIN
+activos = {
+    "Oro (Gold)": "GC=F", 
+    "Yen (USD/JPY)": "USDJPY=X", 
+    "Bitcoin (BTC)": "BTC-USD"
+}
+
 tfs = {"5m": "2d", "15m": "5d", "1h": "30d"}
 
 for nombre, ticker in activos.items():
@@ -67,7 +75,7 @@ for nombre, ticker in activos.items():
     with col_r: st.success(f"**Lote Sugerido: {lote_sugerido:.2f}**")
 
     # CONTENEDOR DE SEÑALES PARA EL FUEGO MAESTRO
-    consenso_tendencia = [] # Aquí guardaremos si es compra o venta en cada TF
+    consenso_tendencia = [] 
 
     try:
         # GRÁFICOS
@@ -83,7 +91,6 @@ for nombre, ticker in activos.items():
             # POC (Point of Control)
             bins = 20
             df['price_bin'] = pd.cut(df['Close'], bins=bins)
-            # Fix para agrupar volumen por bins
             vol_by_bin = df.groupby('price_bin', observed=True)['Volume'].sum()
             poc_idx = vol_by_bin.idxmax()
             poc_price = (poc_idx.left + poc_idx.right) / 2
@@ -97,8 +104,7 @@ for nombre, ticker in activos.items():
             last = df.iloc[-1]
             es_diamante = (last['RVOL'] > 2.0) and (last['Range'] < df['Range'].rolling(20).mean().iloc[-1])
 
-            # DETERMINAR TENDENCIA LOCAL (Para el cuadro y el consenso)
-            # Lógica básica: Precio sobre VWAP = Alcista, Bajo VWAP = Bajista
+            # DETERMINAR TENDENCIA LOCAL
             tendencia = "NEUTRO"
             color_box = "gray"
             if last['Close'] > last['VWAP']:
@@ -122,13 +128,11 @@ for nombre, ticker in activos.items():
                 
                 # 1. POC LÍNEA Y NÚMERO
                 ax.axhline(y=poc_price, color='red', alpha=0.6, linewidth=1.5)
-                # Texto del precio POC en el eje derecho (dentro del gráfico)
                 ax.text(df.index[-1], poc_price, f'{poc_price:.2f}', 
                         color='red', fontsize=9, fontweight='bold', 
                         ha='left', va='center', backgroundcolor='#0e1117')
 
-                # 2. CUADRO DE CONCLUSIÓN (COMPRA / VENTA)
-                # Se coloca en coordenadas relativas (0,1) es esquina superior izq
+                # 2. CUADRO DE CONCLUSIÓN
                 ax.text(0.05, 0.92, f'{tendencia}', transform=ax.transAxes, 
                         color='white', fontsize=10, fontweight='bold', 
                         bbox=dict(facecolor=color_box, alpha=0.7, boxstyle='round,pad=0.5'))
@@ -148,13 +152,13 @@ for nombre, ticker in activos.items():
         
         col_res, col_void = st.columns([3,1])
         with col_res:
-            if len(consenso_tendencia) == 3: # Asegurar que tenemos los 3 TFs
+            if len(consenso_tendencia) == 3:
                 if all(t == "COMPRA" for t in consenso_tendencia):
                     st.error("🔥🔥🔥 ¡FUEGO MAESTRO DETECTADO! ALINEACIÓN TOTAL DE COMPRA 🔥🔥🔥")
-                    st.caption("Los 3 tiempos (5m, 15m, 1h) están sobre el VWAP institucional.")
+                    st.caption(f"Fuerte presión de compra en {nombre} (5m, 15m, 1h).")
                 elif all(t == "VENTA" for t in consenso_tendencia):
                     st.error("🧊🧊🧊 ¡VENTA FUERTE CONFIRMADA! ALINEACIÓN TOTAL BAJISTA 🧊🧊🧊")
-                    st.caption("Los 3 tiempos (5m, 15m, 1h) están bajo presión institucional.")
+                    st.caption(f"Fuerte presión de venta en {nombre} (5m, 15m, 1h).")
                 else:
                     st.info("⚖️ MERCADO MIXTO: Ten cuidado, los tiempos no coinciden.")
             else:
@@ -164,4 +168,4 @@ for nombre, ticker in activos.items():
         st.error(f"Error procesando {nombre}: {e}")
 
 st.markdown("---")
-st.caption("Control Maestro v8 | Algoritmo de Coherencia Institucional")
+st.caption("Control Maestro v8.1 | Algoritmo de Coherencia Institucional")
