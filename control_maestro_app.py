@@ -15,14 +15,14 @@ def check_password():
     return st.session_state["password_correct"]
 
 def password_entered():
-    if st.session_state["password"] == "TU_CLAVE": # <--- CAMBIA TU CLAVE AQUÍ
+    if st.session_state["password"] == "TU_CLAVE":
         st.session_state["password_correct"] = True
         del st.session_state["password"]
     else: st.session_state["password_correct"] = False
 
 if not check_password(): st.stop()
 
-# --- 2. CONFIGURACIÓN TELEGRAM ---
+# --- 2. CONFIGURACIÓN ---
 TOKEN = "8596067199:AAFhwB6pcrCH5FZTE0fkmvkMApKWIbH3cGI"
 CHAT_ID = "759241835"
 
@@ -32,18 +32,39 @@ def enviar_telegram(mensaje):
     except: pass
 
 st.set_page_config(page_title="Control Maestro v4", layout="wide")
-st.title("🎛️ Control Maestro v4")
+st.title("💎 Control Maestro v4: Quant Edition")
 
-# --- LEYENDA Y GUÍA RÁPIDA ---
-with st.expander("📚 LEYENDA Y GUÍA RÁPIDA"):
+# --- LEYENDAS Y POTENCIAL ---
+with st.expander("📚 LEYENDA TÉCNICA (Dummies & Pros)"):
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        **Para Dummies (Explicación Simple):**
+        * **Muro Rojo:** Donde los dueños del dinero compraron mucho. No cruzar sin permiso.
+        * **Línea Cian:** El precio 'justo'. Si el precio está lejos, va a volver como un imán.
+        * **Diamante Azul 💠:** ¡Cuidado! Alguien intentó engañar al mercado y lo atraparon.
+        """)
+    with col2:
+        st.markdown("""
+        **Para Profesionales (Explicación Quant):**
+        * **POC (Point of Control):** High Volume Node. Nivel de máxima liquidez institucional.
+        * **VWAP:** Benchmark institucional de ejecución.
+        * **VSA (Effort vs Result):** Algoritmo que detecta absorción institucional mediante la divergencia entre el rango de la vela y el volumen relativo.
+        """)
+
+with st.expander("🔥 GUÍA DE ESCENARIOS A+ (Máxima Probabilidad)"):
     st.markdown("""
-    **Simbología del Gráfico (Estilo v3):**
-    * **Línea Roja Sólida:** 🚨 **BIG MONEY (POC)**. Donde las instituciones inyectan capital.
-    * **Línea Cian Punteada:** VWAP (Precio Justo).
-    * **Marcador 📍 (Diamante Naranja):** Trampa detectada.
+    **Escenario 1: El Rebote del Muro (Reversión)**
+    1. El precio toca el **Muro Rojo (POC)**.
+    2. Aparece un **Diamante Azul 💠**.
+    3. El precio está fuera de la zona cian (Sobre-extensión).
+    *Resultado:* Entrada inmediata hacia el VWAP.
     
-    **Nueva Alerta Inteligente:**
-    * Recibirás un mensaje especial si la trampa ocurre **tocando el muro rojo**. Esa es la entrada de mayor confianza.
+    **Escenario 2: El Engaño en Tendencia**
+    1. La IA dice: **IR CON TENDENCIA**.
+    2. El precio hace un retroceso al **Muro Rojo**.
+    3. Aparece el **Diamante Azul**.
+    *Resultado:* Continuación de tendencia con stop muy corto.
     """)
 
 if st.sidebar.button('🔄 REESCANEAR MERCADO'):
@@ -58,7 +79,7 @@ for nombre, ticker in activos.items():
         df_main = yf.download(ticker, period="30d", interval="1h", progress=False)
         if isinstance(df_main.columns, pd.MultiIndex): df_main.columns = df_main.columns.get_level_values(0)
         
-        # --- IA K-MEANS ---
+        # --- IA QUANT ---
         df_main['Ret'] = df_main['Close'].pct_change()
         df_main['Volat'] = df_main['Ret'].rolling(10).std()
         df_clean = df_main.dropna()
@@ -67,11 +88,7 @@ for nombre, ticker in activos.items():
         es_tendencia = volat_actual > df_clean['Volat'].mean()
 
         # --- PANEL DE VEREDICTO ---
-        col_v1, col_v2 = st.columns([2, 1])
-        with col_v1:
-            st.subheader(f"🚀 {nombre}: {'IR CON TENDENCIA' if es_tendencia else 'BUSCAR TRAMPAS'}")
-        with col_v2:
-            st.caption(f"IA Status: {'Expansión' if es_tendencia else 'Compresión'}")
+        st.subheader(f"📊 {nombre}: {'ALTA VOLATILIDAD / TENDENCIA' if es_tendencia else 'BAJA VOLATILIDAD / RANGO'}")
 
         # --- GRÁFICOS ---
         cols = st.columns(3)
@@ -79,53 +96,45 @@ for nombre, ticker in activos.items():
             df = yf.download(ticker, period=per, interval=tf, progress=False)
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             
-            # --- BIG MONEY (Volume Profile) ---
+            # --- BIG MONEY (POC) ---
             bins = 15
             df['price_bin'] = pd.cut(df['Close'], bins=bins)
-            vol_profile = df.groupby('price_bin', observed=True)['Volume'].sum()
-            poc_bin = vol_profile.idxmax()
-            poc_price = (poc_bin.left + poc_bin.right) / 2
+            poc_price = (df.groupby('price_bin', observed=True)['Volume'].sum().idxmax().left + df.groupby('price_bin', observed=True)['Volume'].sum().idxmax().right) / 2
             
-            # Cálculos Técnicos
+            # --- VSA (Detección Quant de Instituciones) ---
             df['VWAP'] = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
             df['RVOL'] = df['Volume'] / df['Volume'].rolling(20).mean()
-            df['Body'] = abs(df['Close'] - df['Open'])
-            df['Wick'] = df['High'] - df[['Open', 'Close']].max(axis=1)
+            df['Range'] = df['High'] - df['Low']
+            # Anomalía: Mucho volumen, poco movimiento (Absorción)
+            df['VSA_Anomalia'] = (df['RVOL'] > 2.0) & (df['Range'] < df['Range'].rolling(20).mean())
             
             last = df.iloc[-1]
-            trampa_activa = (last['RVOL'] > 1.7) and (last['Wick'] > last['Body'])
-            
-            # Lógica de proximidad al Muro Rojo (dentro de 0.05%)
-            toca_muro = abs(last['Close'] - poc_price) / poc_price < 0.0005
+            toca_muro = abs(last['Close'] - poc_price) / poc_price < 0.0006
+            # Señal: VSA o Trampa clásica
+            es_diamante = (last['RVOL'] > 1.8) and ( (last['High'] - last[['Open','Close']].max(axis=0) > abs(last['Close']-last['Open'])) or last['VSA_Anomalia'] )
 
             with cols[idx]:
                 fig, ax = plt.subplots(figsize=(6, 4))
                 fig.patch.set_facecolor('#0e1117')
                 ax.set_facecolor('#0e1117')
                 
-                # Visual v3
-                ax.plot(df.index, df['Close'], color='white', alpha=0.3)
-                ax.plot(df.index, df['VWAP'], color='cyan', linestyle='--', alpha=0.5)
-                ax.axhline(y=poc_price, color='red', linestyle='-', alpha=0.8, linewidth=1.5) # Muro Rojo
-                ax.fill_between(df.index, df['VWAP']*1.001, df['VWAP']*0.999, color='cyan', alpha=0.05)
+                ax.plot(df.index, df['Close'], color='white', alpha=0.2, linewidth=1)
+                ax.plot(df.index, df['VWAP'], color='cyan', linestyle='--', alpha=0.4)
+                ax.axhline(y=poc_price, color='red', alpha=0.6, linewidth=1.2)
                 
-                if trampa_activa:
-                    ax.scatter(df.index[-1], df['Close'].iloc[-1], color='orange', s=150, marker='d', zorder=10)
-                    
-                    # ALERTAS TELEGRAM FILTRADAS (Solo M5)
+                if es_diamante:
+                    # AZUL DIAMANTE
+                    ax.scatter(df.index[-1], df['Close'].iloc[-1], color='#00d4ff', s=180, marker='d', zorder=15)
                     if tf == "5m":
-                        if toca_muro:
-                            enviar_telegram(f"🔥 SEÑAL MAESTRA: {nombre} Trampa detectada TOCANDO EL MURO ROJO ({poc_price:.2f}). ¡Entrada de Alta Probabilidad!")
-                        else:
-                            enviar_telegram(f"📍 CONTROL MAESTRO: Trampa en {nombre} (M5). Lejos del muro.")
+                        status_muro = "⚠️ SOBRE EL MURO" if toca_muro else "fuera de zona"
+                        enviar_telegram(f"💎 DIAMANTE AZUL: {nombre} ({tf}) {status_muro}. Muro: {poc_price:.2f}")
 
-                ax.set_title(f"TF: {tf}", color="white", fontsize=9)
-                ax.tick_params(colors='white', labelsize=7)
-                for s in ax.spines.values(): s.set_visible(False)
+                ax.set_title(f"{tf}", color="white", fontsize=10)
+                ax.axis('off') # Diseño ultra limpio
                 st.pyplot(fig)
-                st.write(f"Muro: **{poc_price:.2f}**")
+                st.write(f"POC: {poc_price:.2f}")
 
     except Exception as e:
         st.error(f"Error: {e}")
 
-st.caption(f"Control Maestro v4 | Modo Alerta Big Money Activo")
+st.caption(f"Control Maestro v4 | Quant VSA & Big Money Detector")
