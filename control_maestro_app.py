@@ -26,7 +26,7 @@ if not check_password():
     st.stop()
 
 st.set_page_config(page_title="Control Maestro v9.0", layout="wide", page_icon="F")
-st.title("Control Maestro v9.0: ARIMA + GARCH + Analisis Tecnico")
+st.title("Control Maestro v9.0: ARIMA + GARCH + Análisis Cuantitativo")
 
 # --- 2. LEYENDA UNICA EXPLICATIVA (PARA DUMMIES) ---
 with st.expander("GUIA RAPIDA: Que significa todo esto? (Lee esto primero)", expanded=True):
@@ -255,3 +255,4 @@ for nombre, ticker in activos.items():
 
 st.markdown("---")
 st.caption("Control Maestro v9.0 | ARIMA + GARCH + Análisis Cuantitativo Institucional")
+
