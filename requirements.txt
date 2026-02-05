@@ -2,10 +2,6 @@ streamlit
 yfinance
 pandas
 numpy
-matplotlib
-seaborn
-scikit-learn
-requests
-arch
-plottly
 pmdarima
+arch
+plotly
