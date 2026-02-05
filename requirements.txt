@@ -6,4 +6,6 @@ matplotlib
 seaborn
 scikit-learn
 requests
-
+arch
+plottly
+pmdarima
