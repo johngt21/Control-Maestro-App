@@ -256,5 +256,3 @@ for nombre, ticker in activos.items():
 st.markdown("---")
 st.caption("Control Maestro v9.0 | ARIMA + GARCH + Análisis Cuantitativo Institucional")
 
-git rm --cached <archivo>
-
